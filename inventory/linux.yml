@@ -1,0 +1,16 @@
+---
+# Ansible inventory configuration file for EYE inventory plugin
+#
+# Test with:
+#   ansible-inventory -i linux_inventory.yaml --playbook-dir . --list
+#
+# For caching to work, set "cache" and "cache_plugin" below
+#   See https://docs.ansible.com/ansible/latest/plugins/cache.html
+# For "jsonfile" cache, set "_uri" - see `ansible-doc -t cache jsonfile`:
+#   export ANSIBLE_CACHE_PLUGIN_CONNECTION=/tmp/ansible
+plugin: azul.inventory.eye
+cache: False
+cache_plugin: jsonfile
+baseurl: "http://0.0.0.0:2080/"
+group: AUTO_LINUX,-AUTO_HMC
+...

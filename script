@@ -1,0 +1,96 @@
+#!/bin/bash
+# Dynamic inventory script for Ansible
+# Data is provided by front end "health/ansible" action
+#
+# Besides the "--list" and "--host <hostname>" options (JSON output - required),
+# we also have "--yaml-list" and "--yaml-host <hostname>" options (more readable)
+#
+# 2018-08, Clifford
+
+# Define the URL to connect to (optional if available in eye.rc)
+#baseurl="https://eye.example.com"
+# Exclude groups with invalid names (0/empty), or rename them (anything else)
+#renamegroups=0
+
+# Get the front end URL
+if [ -z "$baseurl" ]
+then
+	rcfile="/var/eye/etc/eye.rc"
+	if [ ! -f "$rcfile" ]
+	then
+		echo "No eye.rc file found - can't determine URL" >&2
+		exit 1
+	fi
+	baseurl=$(awk '/^FRONTEND_BASEURL/ {print $3}' "$rcfile")
+	if [ -z "$baseurl" ]
+	then
+		echo "FRONTEND_BASEURL not defined in eye.rc" >&2
+		exit 1
+	fi
+fi
+
+# Check command line arguments
+if [ $# -eq 1 -a "$1" = "--list" ]
+then
+	fullurl="$baseurl/health/ansible"
+elif [ $# -eq 1 -a "$1" = "--yaml-list" ]
+then
+	fullurl="$baseurl/health/ansible/format/yaml"
+elif [ $# -eq 2 -a "$1" = "--host" ]
+then
+	fullurl="$baseurl/health/ansible/host/$2"
+elif [ $# -eq 2 -a "$1" = "--yaml-host" ]
+then
+	fullurl="$baseurl/health/ansible/format/yaml/host/$2"
+else
+	echo "Usage: $0 --list" >&2
+	echo "   or: $0 --host <hostname>" >&2
+	exit 1
+fi
+if [ ! -z "$renamegroups" ]
+then
+	fullurl="$fullurl/renamegroups/$renamegroups"
+fi
+
+# Find a tool to use, and retrieve the data
+
+curl=$(which curl 2>/dev/null)
+if [ ! -z "$curl" ]
+then
+	$curl --insecure --silent "$fullurl"
+	rc=$?
+	if [ $rc -ne 0 ]
+	then
+		echo "curl download failed with rc $rc" >&2
+	fi
+	exit $rc
+fi
+
+wget=$(which wget 2>/dev/null)
+if [ ! -z "$wget" ]
+then
+	$wget --no-check-certificate --quiet -O - "$fullurl"
+	rc=$?
+	if [ $rc -ne 0 ]
+	then
+		echo "wget download failed with rc $rc" >&2
+	fi
+	exit $rc
+fi
+
+php=$(which php 2>/dev/null)
+if [ ! -z "$php" ]
+then
+	$php -r '$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL, "'${fullurl}'");
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+$rc = curl_exec($ch);
+if ($rc === false) {$stderr = fopen("php://stderr", "w"); fwrite($stderr, curl_error($ch) . "\n"); fclose($stderr);}
+curl_close($ch);
+exit(($rc === false) ? 1 : 0);'
+	exit $?
+fi
+
+# Nothing found
+echo "No suitable download tool found" >&2
+exit 1
